@@ -77,6 +77,18 @@ contract SoundsFactory is Ownable {
         return ( tmpContractOwner == creater );
     }
 
+    function getSoundsTokenInformation( address contractAddress ) public view returns ( 
+        string memory name, 
+        string memory symbol, 
+        uint256 soundsSupply
+    ){
+        return ( 
+            SoundsToken(contractAddress)._name(), 
+            SoundsToken(contractAddress)._symbol(),
+            SoundsToken(contractAddress)._sounds_supply()
+        );
+    }
+
     function getIdContractOf( address addr ) public view returns ( uint256 ){ return _soundsAddressToId[ addr ]; }
     function getStartID() public pure returns ( uint256 ){ return 1; }
     function totalSupply() public view returns ( uint256 ){ return _total_supply; }
