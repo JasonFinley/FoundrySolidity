@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RoleProfit.sol";
 import "./ERC5289Library.sol";
 
-contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
+contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
 
     uint256 public _sounds_supply = 0;
     uint256 private _base_price = 0.01 ether;
@@ -21,19 +21,16 @@ contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
     mapping( uint256 => string ) private _sound_uri;
     // id => copyright price
     mapping( uint16 => uint256 ) private _copyright_price;
+    mapping( address => mapping( uint256 => uint16 ) ) private _user_copyright;
     // Role Profit
     RoleProfit private _role_profit;
-    // copyright
-    ERC5289Library private _copyright;
 
     constructor( string memory name, string memory symbol, address initOwner ) Ownable( initOwner ) ERC1155("") {
         _name = name;
         _symbol = symbol;
-        _copyright = new ERC5289Library();
     }
 
     function getRoleProfitContract() public view returns ( address ) { return address(_role_profit); }
-    function getCopyrightContract() public view returns ( address ) { return address(_copyright); }
 
     function uri(uint256 id) public view virtual override returns (string memory) {
         return _sound_uri[id];//_uri;
@@ -54,8 +51,14 @@ contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
     }
 
     function addCopyright( string memory uri_doc, uint256 price ) public onlyOwner {
-        uint16 docID = _copyright.registerDocument( uri_doc );
+        uint16 docID = _registerDocument( uri_doc );
         _copyright_price[ docID ] = price;
+    }
+    function setCopyrightPrice( uint256 docID, uint256 price ) public onlyOwner {
+        _copyright_price[ uint16(docID) ] = price;
+    }
+    function getCopyrightPrice( uint256 docID ) public view returns (uint256) {
+        return _copyright_price[ uint16(docID) ];
     }
 
     // 創作者 發行 單曲, amount 張
@@ -73,11 +76,9 @@ contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
     // fan buy license
     function mintSound( uint256 id, uint256 licenseID ) public payable {
 
-        
-        require( ++_batch_counter[id] <= _batch_total_supply[ id ], "mintSound : sale out" );
-
         uint16 docID = uint16(licenseID);
-        if( docID < _copyright.getTotalSupplyDocument() ){
+        require( ++_batch_counter[id] <= _batch_total_supply[ id ], "mintSound : sale out" );
+        if( docID != 0 && docID <= getTotalSupplyDocument() ){
             require( msg.value >= _copyright_price[ docID ], "mintSound Copyright: wrong price" );
         }else{
             require( msg.value >= _base_price, "mintSound : wrong price" );
@@ -95,6 +96,13 @@ contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
         amount[0] = 1;
 
         _mintBatch( msg.sender, ids, amount, "" );
+
+        _user_copyright[msg.sender][id] = docID;
+        _signDocument( msg.sender, docID );
+    }
+
+    function getAddressCopyRight( address user, uint256 tokenID ) public view returns ( uint256 ) {
+        return _user_copyright[user][tokenID];
     }
 
     function withdraw() public payable onlyOwner nonReentrant{
@@ -124,4 +132,8 @@ contract SoundsToken is ERC1155, ReentrancyGuard, Ownable {
     }
 
     function getStartID() public pure returns (uint256) { return 1; }
+
+    function supportsInterface(bytes4 _interfaceId) public pure virtual override(ERC1155, ERC5289Library) returns (bool) {
+        return super.supportsInterface(_interfaceId);
+    }
 }

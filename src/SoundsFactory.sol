@@ -37,7 +37,7 @@ contract SoundsFactory is Ownable {
 
         require( bytes( name ).length > 0, "createSoundsContract : Contract Name can't empty !!" );
         require( bytes( symbol ).length > 0, "createSoundsContract : Contract symbol can't empty !!" );
-        require( msg.value >= _price , "createSoundsContract : pay me 0.01 ether !!" );
+        require( msg.value >= _price , "createSoundsContract : pay me 0.1 ether !!" );
 
         (bool success, ) = payable( owner() ).call{value: msg.value}("");
         require(success, "createSoundsContract : Failed to send Ether");
