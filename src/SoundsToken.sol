@@ -9,100 +9,165 @@ import "./ERC5289Library.sol";
 
 contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
 
-    uint256 public _sounds_supply = 0;
-    uint256 private _base_price = 0.01 ether;
+    struct SoundInfo {
+        uint256 ReleaseSupply;
+        uint256 ReleaseCounter;
+        uint256 OnceMax;
+        string BaseURI;
+    }
+
+    uint256 public _total_supply = 0;
+    uint256 private _base_price = 1000;
+    uint256 public _MAX_TOTAL_SUPPLY;
     string public _name;
     string public _symbol;
 
-    // id => batch supply
-    mapping( uint256 => uint256 ) private _batch_total_supply;
-    mapping( uint256 => uint256 ) private _batch_counter;
-    // id => sound uri
-    mapping( uint256 => string ) private _sound_uri;
-    // id => copyright price
-    mapping( uint16 => uint256 ) private _copyright_price;
-    mapping( address => mapping( uint256 => uint16 ) ) private _user_copyright;
-    // Role Profit
-    RoleProfit private _role_profit;
+    // id => sound info
+    mapping( uint256 => SoundInfo ) private _releaseSoundInfo;
 
-    constructor( string memory name, string memory symbol, address initOwner ) Ownable( initOwner ) ERC1155("") {
+    // id => copyright price
+    mapping( uint16 => uint256 ) private _copyrightAmount;
+    mapping( address => mapping( uint256 => uint16 ) ) private _userCopyright;
+    // Role Profit
+    RoleProfit private _roleProfit;
+
+    event SetRoleProfitContract( address indexed owner, address indexed contractAddr );
+    event CreateSound( address indexed owner, uint256 indexed id, string uriSound );
+
+    constructor( string memory name, string memory symbol, uint256 maxTotalSupply, address initOwner ) Ownable( initOwner ) ERC1155("") {
         _name = name;
         _symbol = symbol;
+        _MAX_TOTAL_SUPPLY = maxTotalSupply;
     }
 
-    function getRoleProfitContract() public view returns ( address ) { return address(_role_profit); }
+    function getReleaseSoundInfo( uint256 id ) public view returns ( SoundInfo memory info ) {
+        return _releaseSoundInfo[id];
+    }
 
     function uri(uint256 id) public view virtual override returns (string memory) {
-        return _sound_uri[id];//_uri;
+        return _releaseSoundInfo[id].BaseURI;//_uri;
     }
-    function setSoundURI( uint256 id, string memory uri_sound ) public onlyOwner {
-        _sound_uri[id] = uri_sound;
+    function setSoundURI( uint256 id, string memory uriSound ) public onlyOwner {
+        _releaseSoundInfo[id].BaseURI = uriSound;
+        emit URI( uriSound, id );
     }
-    function setBasePrice( uint256 price ) public onlyOwner { _base_price = price; }
-    function getBasePrice() public view returns(uint256) { return _base_price; }
+    function setPrice( uint256 price ) public onlyOwner { _base_price = price; }
+    function getPrice() public view returns(uint256) { return _base_price; }
 
     // role profit...
-    function setRoleProfit( address[] calldata roles, uint96[] calldata profits ) public onlyOwner {
-        if( address(_role_profit) == address(0) ){
-            _role_profit = new RoleProfit( msg.sender );
-        }else{
-            _role_profit.addRoleListProfit( roles, profits );
+    function getRoleProfitContract() public view returns ( address ) { return address(_roleProfit); }
+    function newRoleProfitContract() public onlyOwner{ _roleProfit = new RoleProfit( address(this) ); }
+    function deleteRoleProfitContract() public onlyOwner{ delete _roleProfit ; }
+
+    function setRoleProfitContract( address role_profit ) public onlyOwner{
+        _roleProfit = RoleProfit( role_profit );
+        require( _roleProfit.checkProfitTotalFee(), "RoleProfitContract : total fee error" );
+        emit SetRoleProfitContract( msg.sender, role_profit );
+    }
+    function addRoleProfit( address roles, uint96 profits ) public onlyOwner {
+        if( address(_roleProfit) == address(0) ){
+            _roleProfit = new RoleProfit( address(this) );
         }
+        _roleProfit.addRoleProfit( roles, profits );
+        
     }
 
-    function addCopyright( string memory uri_doc, uint256 price ) public onlyOwner {
+    function addRoleListProfit( address[] calldata roles, uint96[] calldata profits ) public onlyOwner {
+        if( address(_roleProfit) == address(0) ){
+            _roleProfit = new RoleProfit( address(this) );
+        }
+        _roleProfit.addRoleListProfit( roles, profits );
+        
+    }
+    function updateRoleProfit( address who, uint96 fee ) public onlyOwner{
+        require( address(_roleProfit) != address(0), "no Role Profit Contract" );
+        _roleProfit.updateRoleProfit( who, fee );
+    }
+
+    function removeRoleProfit( address who ) public onlyOwner{
+        require( address(_roleProfit) != address(0), "no Role Profit Contract" );
+        _roleProfit.removeRoleProfit( who );
+    }
+
+    //copyright.....
+    //array must sort, became will get copyright id => search is (small->big) value... 
+    function setBatchCopyright( string[] calldata uri_docs, uint256[] calldata amounts ) public onlyOwner {
+        require( uri_docs.length == amounts.length , "Copyright : array is error!!" );
+        _registerBatchDocument( uri_docs );
+        uint256 startID = getDocumentStartID();
+        for( uint i = 0 ; i < amounts.length ; )
+        {
+            _copyrightAmount[ uint16(startID + i) ] = amounts[i];
+            unchecked{
+                i += 1;
+            }
+        }
+    }
+    function getUserCopyrightID( address user, uint256 tokenID ) public view returns (uint256) {
+        uint256 balance = balanceOf( user, tokenID );
+        uint256 startID = getDocumentStartID();
+        uint16 lastID = 0;
+        for( uint i = 0 ; i < getDocumentTotalSupply() ; )
+        {
+            uint16 id = uint16( startID + i );
+            if( balance > _copyrightAmount[ id ] ){
+                lastID = id;
+            }else{
+                break;
+            }
+
+            unchecked{
+                i += 1;
+            }
+        }
+
+        return lastID;
+    }
+
+    function addCopyrightAmount( string calldata uri_doc, uint256 amount ) public onlyOwner {
         uint16 docID = _registerDocument( uri_doc );
-        _copyright_price[ docID ] = price;
+        _copyrightAmount[ docID ] = amount;
     }
-    function setCopyrightPrice( uint256 docID, uint256 price ) public onlyOwner {
-        _copyright_price[ uint16(docID) ] = price;
+    function setCopyrightAmount( uint256 docID, uint256 amount ) public onlyOwner {
+        require( docID <= type( uint16 ).max, "Copyright : id error!!" );
+        _copyrightAmount[ uint16(docID) ] = amount;
     }
-    function getCopyrightPrice( uint256 docID ) public view returns (uint256) {
-        return _copyright_price[ uint16(docID) ];
+    function getCopyrightAmount( uint256 docID ) public view returns (uint256) {
+        return _copyrightAmount[ uint16(docID) ];
     }
 
     // 創作者 發行 單曲, amount 張
-    function createSound( uint256 amount, string memory uri_sound ) public onlyOwner {
+    function createSound( uint256 releaseSupply, uint256 onceMax, string memory uriSound ) public onlyOwner {
 
-        uint256 id = _sounds_supply + getStartID();
-        _mint( msg.sender, id, amount, "" );
-        _sound_uri[id] = uri_sound;
-        _batch_total_supply[id] = amount;
+        uint256 id = _total_supply + getStartID();
+        require( releaseSupply <= type( uint256 ).max, "createSound : release Supply is over" );
+        require( onceMax <= type( uint256 ).max, "createSound : once is over" );
+
+        _releaseSoundInfo[ id ] = SoundInfo( releaseSupply, 0, onceMax, uriSound );
         unchecked{
-            _sounds_supply += 1;
+            _total_supply += 1;
         }
+
+        emit CreateSound( msg.sender, id, uriSound );
     }
 
     // fan buy license
-    function mintSound( uint256 id, uint256 licenseID ) public payable {
+    function mintSound( uint256 id, uint256 amount ) public payable {
 
-        uint16 docID = uint16(licenseID);
-        require( ++_batch_counter[id] <= _batch_total_supply[ id ], "mintSound : sale out" );
-        if( docID != 0 && docID <= getTotalSupplyDocument() ){
-            require( msg.value >= _copyright_price[ docID ], "mintSound Copyright: wrong price" );
-        }else{
-            require( msg.value >= _base_price, "mintSound : wrong price" );
-        }
+        uint256 price;
+        SoundInfo storage sound = _releaseSoundInfo[id];
+        require( amount <= sound.OnceMax, "mintSound : amount too much" );
+        require( ( sound.ReleaseCounter + amount ) <= sound.ReleaseSupply, "mintSound : sale out or amount too much" );
 
-        //deposit this contract....不然user有機會gas 花太多, 會降低mint 意願
-        //由owner( 創作者自己withdraw )
-        bool sent = payable( address(this) ).send(msg.value);
-        require(sent, "Failed to send Ether");
+        price = amount * _base_price;
+        require( msg.value >= price, "mintSound Copyright: wrong price" );
 
-        uint256[] memory ids = new uint[](1);
-        uint256[] memory amount = new uint[](1);
-
-        ids[0] = id;
-        amount[0] = 1;
-
-        _mintBatch( msg.sender, ids, amount, "" );
-
-        _user_copyright[msg.sender][id] = docID;
-        _signDocument( msg.sender, docID );
+        sound.ReleaseCounter += amount;
+        _mint( msg.sender, id, amount, "" );
     }
 
     function getAddressCopyRight( address user, uint256 tokenID ) public view returns ( uint256 ) {
-        return _user_copyright[user][tokenID];
+        return _userCopyright[user][tokenID];
     }
 
     function withdraw() public payable onlyOwner nonReentrant{
@@ -110,9 +175,9 @@ contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
         uint256 balance = address(this).balance;
         uint256 role_amount = 0;
         
-        if( address(_role_profit) != address(0) ){
+        if( address(_roleProfit) != address(0) ){
             //分潤成員..
-            ( uint256 totalAmount, address[] memory role, uint256[] memory amount ) = _role_profit.royaltyInfo( balance );
+            ( uint256 totalAmount, address[] memory role, uint256[] memory amount ) = _roleProfit.royaltyInfo( balance );
             for( uint256 i = 0 ; i < role.length ; )
             {
                 (bool sent, ) = payable(role[i]).call{value: amount[i]}("");
@@ -136,4 +201,5 @@ contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
     function supportsInterface(bytes4 _interfaceId) public pure virtual override(ERC1155, ERC5289Library) returns (bool) {
         return super.supportsInterface(_interfaceId);
     }
+
 }

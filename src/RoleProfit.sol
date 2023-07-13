@@ -60,18 +60,18 @@ contract RoleProfit is Ownable {
         return ( _role_profit.length, _role_profit );
     }
 
-    function _checkProfitTotalFee() internal view returns (bool) {
+    function checkProfitTotalFee() public view returns (bool) {
         uint256 i;
         uint256 total_fee = 0;
         uint256 feeDen = _feeDenominator();
         for( i = 0 ; i < _role_profit.length ; )
         {
-            unchecked{
-                total_fee += _role_profit[i].fee;
-                i += 1;
-            }
+            total_fee += _role_profit[i].fee;
             if( total_fee > feeDen )
                 return false;
+            unchecked{
+                i += 1;
+            }
         }
         return true;
     }
@@ -87,14 +87,12 @@ contract RoleProfit is Ownable {
         for( uint i = 0 ; i < wallet.length ; )
         {
             require( wallet[i] != address(0), "address is zero" );
-
             _role_profit.push( RoleProfitFee( wallet[i], fee[i] ) );
-
+            total_fee += fee[i];
+            require( total_fee <= feeDen , "Profit Total Fee over 10000" );
             unchecked{
-                total_fee += fee[i];
                 i += 1;
             }
-            require( total_fee <= feeDen , "Profit Total Fee over 10000" );
         }
 
     }
@@ -103,7 +101,7 @@ contract RoleProfit is Ownable {
         require( wallet != address(0), "address is zero" );
         _role_profit.push( RoleProfitFee( wallet, fee ) );
 
-        require( _checkProfitTotalFee(), "Profit Total Fee over 10000" );
+        require( checkProfitTotalFee(), "check Profit Total Fee over 10000" );
     }
 
     function updateRoleProfit( address wallet, uint96 fee ) public onlyOwner{
@@ -119,7 +117,7 @@ contract RoleProfit is Ownable {
             }
         }
 
-        require( _checkProfitTotalFee(), "Profit Total Fee over 10000" );
+        require( checkProfitTotalFee(), "Profit Total Fee over 10000" );
     }
 
     function removeRoleAllProfit() public onlyOwner{
@@ -129,10 +127,11 @@ contract RoleProfit is Ownable {
     function removeRoleProfit( address wallet ) public onlyOwner{
         require( wallet != address(0), "address is zero" );
         uint256 i = 0;
-        for( i = 0 ; i < _role_profit.length ;  )
+        uint256 cnt = _role_profit.length;
+        for( i = 0 ; i < cnt ;  )
         {
             if( _role_profit[i].role == wallet ){
-                _role_profit[i] = _role_profit[ _role_profit.length - 1 ];
+                _role_profit[i] = _role_profit[ cnt - 1 ];
                 _role_profit.pop();
                 return;
             }

@@ -16,6 +16,7 @@ contract SoundsFactory is Ownable {
     }
 
     uint256 public constant _price = 0.1 ether;
+    uint256 public _sound_contract_max_tokens = 64;
     uint256 private _total_supply = 0;
     string public constant _factoryName = "Sounds Factory";
 
@@ -30,19 +31,19 @@ contract SoundsFactory is Ownable {
 
     constructor() Ownable(msg.sender) {}
 
-    function createSoundsContract( 
+    function createSoundsContract(
         string memory name, 
         string memory symbol
-    ) public payable {
+    ) public payable returns ( address, uint256 ){
 
         require( bytes( name ).length > 0, "createSoundsContract : Contract Name can't empty !!" );
         require( bytes( symbol ).length > 0, "createSoundsContract : Contract symbol can't empty !!" );
-        require( msg.value >= _price , "createSoundsContract : pay me 0.1 ether !!" );
+        require( msg.value >= _price , "createSoundsContract : pay creater 0.1 ether !!" );
 
         (bool success, ) = payable( owner() ).call{value: msg.value}("");
         require(success, "createSoundsContract : Failed to send Ether");
 
-        SoundsToken sounds = new SoundsToken( name, symbol, msg.sender );
+        SoundsToken sounds = new SoundsToken( name, symbol, _sound_contract_max_tokens, msg.sender );
 
         address soundsAddr = address(sounds);
         uint256 id = _total_supply + getStartID();
@@ -57,6 +58,7 @@ contract SoundsFactory is Ownable {
         }
 
         emit CreateSoundContract( msg.sender, id, soundsAddr );
+        return ( soundsAddr, id );
     }
 
     function getIDsCreaterOf( address creater ) public view returns ( uint256 cnt, uint256[] memory ids ){
@@ -85,12 +87,12 @@ contract SoundsFactory is Ownable {
         return ( 
             SoundsToken(contractAddress)._name(), 
             SoundsToken(contractAddress)._symbol(),
-            SoundsToken(contractAddress)._sounds_supply()
+            SoundsToken(contractAddress)._total_supply()
         );
     }
 
     function getIdContractOf( address addr ) public view returns ( uint256 ){ return _soundsAddressToId[ addr ]; }
     function getStartID() public pure returns ( uint256 ){ return 1; }
     function totalSupply() public view returns ( uint256 ){ return _total_supply; }
-
+    function setSoundContractMaxTokens( uint256 max ) public onlyOwner { _sound_contract_max_tokens = max; }
 }

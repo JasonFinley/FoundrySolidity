@@ -9,18 +9,36 @@ contract ERC5289Library is IERC165, IERC5289Library {
     mapping(uint16 => string) private uris;
     mapping(uint16 => mapping(address => uint64)) signedAt;
 
+    event RegisterDocument(address indexed who, uint16 indexed documentId, string uri );
     event SignedWrongCall(address indexed caller, address indexed signer, uint16 indexed documentId);
 
     constructor() {}
 
-    function getTotalSupplyDocument() public view returns ( uint16 ){ return counter; }
-    function getStartDocumentID() public pure returns ( uint16 ){ return 1; }
+    function getDocumentTotalSupply() public view returns ( uint16 ){ return counter; }
+    function getDocumentStartID() public pure returns ( uint16 ){ return 1; }
 
-    function _registerDocument(string memory uri) internal returns (uint16) {
+    function _registerBatchDocument( string[] calldata uri ) internal {
+        
+        require( uri.length <= type(uint16).max, "ERC5289Library : uri too much" );
+        counter = 0;
+        for( uint i = 0 ; i < uri.length ; )
+        {
+            uris[ ++counter ] = uri[i];
+            emit RegisterDocument( msg.sender, counter, uri[i] );
+            unchecked{
+                i++;
+            }
+        }
+
+    }
+
+    function _registerDocument(string calldata uri) internal returns (uint16) {
 
         require( ++counter < type(uint16).max, "ERC5289Library : over register" );
 
         uris[ counter ] = uri;
+
+        emit RegisterDocument( msg.sender, counter, uri );
         return counter;
     }
 
