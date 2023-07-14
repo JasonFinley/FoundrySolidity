@@ -138,7 +138,7 @@ contract SoundsTokenTest is Test {
         profits[1] = _ComposerRoleFee;
         profits[2] = _LyricistRoleFee;
         profits[3] = _ArranferRoleFee;
-        _soundsToken.addRoleListProfit( roles, profits );
+        _soundsToken.addBatchRoleProfit( roles, profits );
         vm.stopPrank();
 
         vm.startPrank( _Fans );

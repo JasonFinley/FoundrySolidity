@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IRoleProfit.sol";
 //ERC2981 //Implementation of the NFT Royalty Standard, a standardized way to retrieve royalty payment information
 
 //設定分潤的合約
-contract RoleProfit is Ownable {
-
-    // 分潤比例 : max 10000 => 0.01 * 10000 %
-    struct RoleProfitFee {
-        address role;
-        uint96 fee;
-    }
+contract RoleProfit is IRoleProfit {
 
     RoleProfitFee[] private _role_profit;
 
-    constructor( address initOwner ) Ownable( initOwner ) {}
+    constructor() {}
 
-    function royaltyInfo( uint256 salePrice) public view returns (uint256 totalAmount, address[] memory role, uint256[] memory amount) {
+    function royalty( uint256 supply ) public view returns (uint256 totalAmount, address[] memory role, uint256[] memory amount) {
         uint256 total_amount = 0;
         uint256 feeDen = _feeDenominator();
         uint256 cnt = _role_profit.length;
@@ -29,7 +23,7 @@ contract RoleProfit is Ownable {
             RoleProfitFee storage roleProfit = _role_profit[i];
             require( roleProfit.role != address(0), "role profit is zero" );
 
-            uint256 tmp_amount = (salePrice * roleProfit.fee) / feeDen;
+            uint256 tmp_amount = (supply * roleProfit.fee) / feeDen;
             roleList[i] = roleProfit.role;
             amountList[i] = tmp_amount;
             total_amount += tmp_amount;
@@ -42,11 +36,11 @@ contract RoleProfit is Ownable {
         return ( total_amount, roleList, amountList );
     }
 
-    function getRoleProfitFee( address wallet ) public view returns( uint96 ){
-        require( wallet != address(0), "address is zero" );
+    function roleProfitFeeBalanceOf( address who ) public view returns( uint96 ){
+        require( who != address(0), "address is zero" );
         for( uint256 i = 0 ; i < _role_profit.length ; )
         {
-            if( _role_profit[i].role == wallet ){
+            if( _role_profit[i].role == who ){
                 return _role_profit[i].fee;
             }
             unchecked{
@@ -56,11 +50,11 @@ contract RoleProfit is Ownable {
         return 0;
     }
 
-    function getRoleProfit() public view returns ( uint256 count, RoleProfitFee[] memory profit ) {
-        return ( _role_profit.length, _role_profit );
+    function roleProfitAll() public view returns ( RoleProfitFee[] memory roleProfit ) {
+        return _role_profit;
     }
 
-    function checkProfitTotalFee() public view returns (bool) {
+    function isOverFeeDenominator() public view returns (bool) {
         uint256 i;
         uint256 total_fee = 0;
         uint256 feeDen = _feeDenominator();
@@ -68,28 +62,29 @@ contract RoleProfit is Ownable {
         {
             total_fee += _role_profit[i].fee;
             if( total_fee > feeDen )
-                return false;
+                return true;
             unchecked{
                 i += 1;
             }
         }
-        return true;
+        return false;
     }
 
     function _feeDenominator() internal pure returns (uint96){
         return 10000;
     }
 
-    function addRoleListProfit( address[] calldata wallet, uint96[] calldata fee ) public onlyOwner{
-        require( wallet.length == fee.length, "role & fee length are different!!" );
+    function _addBatchRoleProfit( address[] calldata who, uint96[] calldata fee ) internal {
+        require( who.length == fee.length, "role & fee length are different!!" );
         uint256 total_fee = 0;
         uint256 feeDen = _feeDenominator();
-        for( uint i = 0 ; i < wallet.length ; )
+        for( uint i = 0 ; i < who.length ; )
         {
-            require( wallet[i] != address(0), "address is zero" );
-            _role_profit.push( RoleProfitFee( wallet[i], fee[i] ) );
+            require( who[i] != address(0), "address is zero" );
+            _role_profit.push( RoleProfitFee( who[i], fee[i] ) );
             total_fee += fee[i];
             require( total_fee <= feeDen , "Profit Total Fee over 10000" );
+            emit AddRoleFit( who[i], fee[i] );
             unchecked{
                 i += 1;
             }
@@ -97,18 +92,18 @@ contract RoleProfit is Ownable {
 
     }
 
-    function addRoleProfit( address wallet, uint96 fee ) public onlyOwner{
-        require( wallet != address(0), "address is zero" );
-        _role_profit.push( RoleProfitFee( wallet, fee ) );
-
-        require( checkProfitTotalFee(), "check Profit Total Fee over 10000" );
+    function _addRoleProfit( address who, uint96 fee ) internal {
+        require( who != address(0), "address is zero" );
+        _role_profit.push( RoleProfitFee( who, fee ) );
+        emit AddRoleFit( who, fee );
+        require( !isOverFeeDenominator(), "check Profit Total Fee over 10000" );
     }
 
-    function updateRoleProfit( address wallet, uint96 fee ) public onlyOwner{
-        require( wallet != address(0), "address is zero" );
+    function _updateRoleProfit( address who, uint96 fee ) internal {
+        require( who != address(0), "address is zero" );
         for( uint256 i = 0 ; i < _role_profit.length ; )
         {
-            if( _role_profit[i].role == wallet ){
+            if( _role_profit[i].role == who ){
                 _role_profit[i].fee = fee;
                 break;
             }
@@ -117,22 +112,24 @@ contract RoleProfit is Ownable {
             }
         }
 
-        require( checkProfitTotalFee(), "Profit Total Fee over 10000" );
+        require( !isOverFeeDenominator(), "Profit Total Fee over 10000" );
     }
 
-    function removeRoleAllProfit() public onlyOwner{
+    function _removeRoleAllProfit() internal {
         delete _role_profit;
+        emit RemoveRoleFit( address(0), "Remove ALL Role" );
     }
 
-    function removeRoleProfit( address wallet ) public onlyOwner{
-        require( wallet != address(0), "address is zero" );
+    function _removeRoleProfit( address who ) internal {
+        require( who != address(0), "address is zero" );
         uint256 i = 0;
         uint256 cnt = _role_profit.length;
         for( i = 0 ; i < cnt ;  )
         {
-            if( _role_profit[i].role == wallet ){
+            if( _role_profit[i].role == who ){
                 _role_profit[i] = _role_profit[ cnt - 1 ];
                 _role_profit.pop();
+                emit RemoveRoleFit( who, "Remove" );
                 return;
             }
 

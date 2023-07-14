@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./RoleProfit.sol";
 import "./ERC5289Library.sol";
 
-contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
+contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, RoleProfit, Ownable {
 
     struct SoundInfo {
         uint256 ReleaseSupply;
@@ -28,10 +28,7 @@ contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
     // id => copyright price
     mapping( uint16 => uint256 ) private _copyrightAmount;
     mapping( address => mapping( uint256 => uint16 ) ) private _userCopyright;
-    // Role Profit
-    RoleProfit private _roleProfit;
-
-    event SetRoleProfitContract( address indexed owner, address indexed contractAddr );
+    
     event CreateSound( address indexed owner, uint256 indexed id, string uriSound );
 
     constructor( string memory name, string memory symbol, uint256 maxTotalSupply, address initOwner ) Ownable( initOwner ) ERC1155("") {
@@ -55,38 +52,20 @@ contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
     function getPrice() public view returns(uint256) { return _base_price; }
 
     // role profit...
-    function getRoleProfitContract() public view returns ( address ) { return address(_roleProfit); }
-    function newRoleProfitContract() public onlyOwner{ _roleProfit = new RoleProfit( address(this) ); }
-    function deleteRoleProfitContract() public onlyOwner{ delete _roleProfit ; }
-
-    function setRoleProfitContract( address role_profit ) public onlyOwner{
-        _roleProfit = RoleProfit( role_profit );
-        require( _roleProfit.checkProfitTotalFee(), "RoleProfitContract : total fee error" );
-        emit SetRoleProfitContract( msg.sender, role_profit );
-    }
     function addRoleProfit( address roles, uint96 profits ) public onlyOwner {
-        if( address(_roleProfit) == address(0) ){
-            _roleProfit = new RoleProfit( address(this) );
-        }
-        _roleProfit.addRoleProfit( roles, profits );
-        
+        _addRoleProfit( roles, profits );
     }
 
-    function addRoleListProfit( address[] calldata roles, uint96[] calldata profits ) public onlyOwner {
-        if( address(_roleProfit) == address(0) ){
-            _roleProfit = new RoleProfit( address(this) );
-        }
-        _roleProfit.addRoleListProfit( roles, profits );
+    function addBatchRoleProfit( address[] calldata roles, uint96[] calldata profits ) public onlyOwner {
+        _addBatchRoleProfit( roles, profits );
         
     }
     function updateRoleProfit( address who, uint96 fee ) public onlyOwner{
-        require( address(_roleProfit) != address(0), "no Role Profit Contract" );
-        _roleProfit.updateRoleProfit( who, fee );
+        _updateRoleProfit( who, fee );
     }
 
     function removeRoleProfit( address who ) public onlyOwner{
-        require( address(_roleProfit) != address(0), "no Role Profit Contract" );
-        _roleProfit.removeRoleProfit( who );
+        _removeRoleProfit( who );
     }
 
     //copyright.....
@@ -175,20 +154,18 @@ contract SoundsToken is ERC1155, ReentrancyGuard, ERC5289Library, Ownable {
         uint256 balance = address(this).balance;
         uint256 role_amount = 0;
         
-        if( address(_roleProfit) != address(0) ){
-            //分潤成員..
-            ( uint256 totalAmount, address[] memory role, uint256[] memory amount ) = _roleProfit.royaltyInfo( balance );
-            for( uint256 i = 0 ; i < role.length ; )
-            {
-                (bool sent, ) = payable(role[i]).call{value: amount[i]}("");
-                require(sent, "Failed to send Ether");
-                unchecked{
-                    i += 1;
-                }
+        //分潤成員..
+        ( uint256 totalAmount, address[] memory role, uint256[] memory amount ) = royalty( balance );
+        for( uint256 i = 0 ; i < role.length ; )
+        {
+            (bool sent, ) = payable(role[i]).call{value: amount[i]}("");
+            require(sent, "Failed to send Ether");
+            unchecked{
+                i += 1;
             }
-            role_amount = totalAmount;
         }
-
+        role_amount = totalAmount;
+        
         uint256 remain = balance - role_amount;//分剩的...
         if( remain > 0 ){
             (bool sent, ) = payable( owner() ).call{value: remain}("");
