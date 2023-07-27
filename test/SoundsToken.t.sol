@@ -45,7 +45,7 @@ contract SoundsTokenTest is Test {
         vm.deal( _Other, 1 ether );
 
         vm.startPrank( _Singer );
-        (address addr, ) = _soundsFactory.createSoundsContract{value: 0.1 ether}( _tokenName, _tokenSymbol );
+        (address addr, ) = _soundsFactory.createSoundsToken{value: 0.1 ether}( _tokenName, _tokenSymbol );
         _tokenAddress = addr;
         vm.stopPrank();
         

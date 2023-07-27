@@ -27,11 +27,11 @@ contract SoundsFactory is Ownable {
     // creater => creater balanceOf
     mapping( address => CreaterInfo ) private _createrContract;
 
-    event CreateSoundContract( address indexed creater, uint256 indexed id, address indexed contractAddr );
+    event CreateSoundsToken( address indexed creater, uint256 indexed id, address indexed contractAddr );
 
     constructor() Ownable(msg.sender) {}
 
-    function createSoundsContract(
+    function createSoundsToken(
         string memory name, 
         string memory symbol
     ) public payable returns ( address, uint256 ){
@@ -44,6 +44,8 @@ contract SoundsFactory is Ownable {
         require(success, "createSoundsContract : Failed to send Ether");
 
         SoundsToken sounds = new SoundsToken( name, symbol, _sound_contract_max_tokens, msg.sender );
+        // if verion is old, must transferOwnership !!
+        //sounds.transferOwnership(msg.sender);
 
         address soundsAddr = address(sounds);
         uint256 id = _total_supply + getStartID();
@@ -57,7 +59,7 @@ contract SoundsFactory is Ownable {
             _total_supply += 1;
         }
 
-        emit CreateSoundContract( msg.sender, id, soundsAddr );
+        emit CreateSoundsToken( msg.sender, id, soundsAddr );
         return ( soundsAddr, id );
     }
 
@@ -72,7 +74,7 @@ contract SoundsFactory is Ownable {
         return ( _soundsContractInfo[id].addr, _soundsContractInfo[id].creater );
     }
 
-    function checkContractCreaterSameOwner( address addr ) public view returns ( bool ){
+    function isContractCreaterSameOwner( address addr ) public view returns ( bool ){
         address tmpContractOwner = Ownable( addr ).owner();
         uint256 id = getIdContractOf(addr);
         ( , address creater ) = getCreater( id );

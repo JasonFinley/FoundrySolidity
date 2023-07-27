@@ -38,7 +38,7 @@ contract SoundsFactoryTest is Test {
         string memory tokenSymbol = "MSC";
         vm.startPrank( _Singer );
         vm.deal( _Singer, 1 ether);
-        _sounds_factory.createSoundsContract{ value: 0.1 ether }( tokenName, tokenSymbol );
+        _sounds_factory.createSoundsToken{ value: 0.1 ether }( tokenName, tokenSymbol );
         vm.stopPrank();
         ( , uint256[] memory ids ) = _sounds_factory.getIDsCreaterOf( _Singer );
         ( address contractAddr, ) = _sounds_factory.getCreater( ids[0] );
@@ -56,7 +56,7 @@ contract SoundsFactoryTest is Test {
         string memory tokenSymbol = "MSC";
         vm.startPrank( _Singer );
         vm.deal( _Singer, 1 ether);
-        _sounds_factory.createSoundsContract{ value: 0.1 ether }( tokenName, tokenSymbol );
+        _sounds_factory.createSoundsToken{ value: 0.1 ether }( tokenName, tokenSymbol );
         vm.stopPrank();
 
         assertEq( _sounds_factory.totalSupply(), 1 );
@@ -74,7 +74,7 @@ contract SoundsFactoryTest is Test {
             ( address contractAddr, address creater ) = _sounds_factory.getCreater( ids[i] );
             assertEq( creater, _Singer );
             assertFalse( contractAddr == address(0) );
-            assertFalse( !_sounds_factory.checkContractCreaterSameOwner( contractAddr ) );
+            assertFalse( !_sounds_factory.isContractCreaterSameOwner( contractAddr ) );
             assertEq( _sounds_factory.getIdContractOf( contractAddr ), ids[i] );
         }
     }
